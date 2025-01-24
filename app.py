@@ -6,26 +6,38 @@ from google.oauth2.service_account import Credentials
 
 app = Flask(__name__)
 
-# Load Google Sheets API credentials from rsa.json
-def get_google_sheets_service():
+# Load Google Service Account Credentials
+def load_google_credentials():
     try:
         with open("rsa.json", "r") as file:
             credentials_data = json.load(file)
 
+        # Ensure private_key is properly formatted
+        if "private_key" not in credentials_data or not credentials_data["private_key"]:
+            raise ValueError("❌ Private key is missing or incorrectly formatted!")
+
+        # Fix formatting if necessary
+        if not credentials_data["private_key"].startswith("-----BEGIN PRIVATE KEY-----"):
+            credentials_data["private_key"] = "-----BEGIN PRIVATE KEY-----\n" + credentials_data["private_key"] + "\n-----END PRIVATE KEY-----"
+
+        # Authenticate with Google API
         credentials = Credentials.from_service_account_info(
             credentials_data,
             scopes=["https://www.googleapis.com/auth/spreadsheets"]
         )
-        return build("sheets", "v4", credentials=credentials)
-    except Exception as e:
-        return str(e)
 
-# Function to write data to Google Sheets
+        return build("sheets", "v4", credentials=credentials)
+
+    except Exception as e:
+        print(f"❌ Error loading credentials: {e}")
+        return None
+
+# Write Data to Google Sheets
 def write_to_google_sheet(sheet_id, data, sheet_range):
     try:
-        service = get_google_sheets_service()
-        if isinstance(service, str):  # If service returns an error string
-            return service
+        service = load_google_credentials()
+        if not service:
+            return "❌ Google Sheets authentication failed!"
 
         body = {"values": data}
 
@@ -36,11 +48,11 @@ def write_to_google_sheet(sheet_id, data, sheet_range):
             body=body
         ).execute()
 
-        return "Data written successfully"
+        return "✅ Data written successfully!"
     except Exception as e:
         return str(e)
 
-# Function to connect to MySQL database
+# Connect to MySQL Database
 def get_db_connection(host, user, password, database):
     try:
         return pymysql.connect(
@@ -53,17 +65,15 @@ def get_db_connection(host, user, password, database):
     except Exception as e:
         return str(e)
 
-# Main API route to process data from MySQL to Google Sheets
+# API Endpoint: Process Data
 @app.route("/api", methods=["POST"])
 def process_data():
     try:
-        # Extract data from request
         request_data = request.json
         sheet_id = request_data.get("sheetid")
         sheet_range = request_data.get("range")
         query = request_data.get("qry")
 
-        # Database connection details from request
         db_host = request_data.get("host")
         db_user = request_data.get("user")
         db_password = request_data.get("password")
@@ -71,7 +81,7 @@ def process_data():
 
         # Validate required fields
         if not all([sheet_id, sheet_range, query, db_host, db_user, db_password, db_name]):
-            return jsonify({"status": "error", "message": "Missing required fields"}), 400
+            return jsonify({"status": "error", "message": "❌ Missing required fields!"}), 400
 
         # Connect to the database
         connection = get_db_connection(db_host, db_user, db_password, db_name)
@@ -90,14 +100,15 @@ def process_data():
         result = write_to_google_sheet(sheet_id, data, sheet_range)
 
         return jsonify({"status": "success", "message": result}), 200
+
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
-# Health check route
+# Test API Endpoint
 @app.route("/test", methods=["GET"])
 def test_api():
-    return jsonify({"status": "success", "message": "API is running!"}), 200
+    return jsonify({"status": "success", "message": "✅ API is running!"}), 200
 
-# Run the Flask app
+# Run the Flask App
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
