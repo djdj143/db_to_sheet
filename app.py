@@ -67,6 +67,7 @@ def get_db_connection(host, user, password, database):
 
 # API Endpoint: Process Data
 @app.route("/api", methods=["POST"])
+@app.route("/api", methods=["POST"])
 def process_data():
     try:
         request_data = request.json
@@ -92,6 +93,12 @@ def process_data():
         cursor.execute(query)
         results = cursor.fetchall()
         connection.close()
+
+        # Convert date fields to string format
+        for row in results:
+            for key, value in row.items():
+                if isinstance(value, (datetime.date, datetime.datetime)):
+                    row[key] = value.strftime("%Y-%m-%d")  # Convert date to "YYYY-MM-DD"
 
         # Convert results to a list of lists for Google Sheets API
         data = [list(row.values()) for row in results]
