@@ -56,18 +56,19 @@ def write_to_google_sheet(sheet_id, data, sheet_range):
 # Connect to MySQL Database
 def get_db_connection(host, user, password, database):
     try:
-        return pymysql.connect(
+        connection = pymysql.connect(
             host=host,
             user=user,
             password=password,
             database=database,
+            connect_timeout=60,
             cursorclass=pymysql.cursors.DictCursor
         )
-    except Exception as e:
-        return str(e)
+        return connection
+    except pymysql.MySQLError as e:
+        return f"❌ MySQL Connection Error: {str(e)}"
 
 # API Endpoint: Process Data
-@app.route("/api", methods=["POST"])
 @app.route("/api", methods=["POST"])
 def process_data():
     try:
@@ -93,6 +94,8 @@ def process_data():
         cursor = connection.cursor()
         cursor.execute(query)
         results = cursor.fetchall()
+        connection.commit()
+        cursor.close()
         connection.close()
 
         # Convert date fields to string format
@@ -109,13 +112,10 @@ def process_data():
 
         return jsonify({"status": "success", "message": result}), 200
 
+    except pymysql.MySQLError as db_err:
+        return jsonify({"status": "error", "message": f"❌ Database Error: {str(db_err)}"}), 500
     except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
-
-# Test API Endpoint
-@app.route("/test", methods=["GET"])
-def test_api():
-    return jsonify({"status": "success", "message": "✅ API is running!"}), 200
+        return jsonify({"status": "error", "message": f"❌ Internal Server Error: {str(e)}"}), 500
 
 # Run the Flask App
 if __name__ == "__main__":
